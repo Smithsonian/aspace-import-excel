@@ -106,7 +106,7 @@ module LinkedObjects
       end
     end
     if !ret_ag
-      a_params = {"q" => "title:\"#{agent[:name]}\" AND primary_type:agent_#{agent[:type]}"}
+      a_params = {"q" => "title_sort:\"#{agent[:name]}\" AND primary_type:agent_#{agent[:type]}"}
       repo = resource_uri.split('/')[2]
       ret_ag = search(repo, a_params, "agent_#{agent[:type]}".to_sym)
     end
@@ -406,7 +406,7 @@ module LinkedObjects
 
     def self.get_db_subj(subject)
       s_params = {}
-      s_params["q"] = "title:\"#{subject[:term]}\" AND first_term_type:#{subject[:type]}"
+      s_params["q"] = "title_sort:\"#{subject[:term]}\" AND first_term_type:#{subject[:type]}"
 
       ret_subj = search(nil, s_params, :subject, 'subjects')
     end
