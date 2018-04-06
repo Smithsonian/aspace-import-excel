@@ -67,5 +67,6 @@ en:
        has_dig_obj: "Archival object already has an associated digital object"
        ref_id_miss: No Ref Id specified
        dig_info_miss: Neither the Digital Object URN or the Thumbnail URN is specified
+       si_agent_type_invalid: "Unable to create agent due to problem with SI field agent type value '%{value}': %{why}"
 
 

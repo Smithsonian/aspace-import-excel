@@ -13,17 +13,19 @@ module LinkedObjects
     @@agents = {}
     @@agent_relators ||= EnumList.new('linked_agent_archival_record_relators')
     AGENT_TYPES = {
-      'families' => 'family', 'corporate_entities' => 'corporate_entity', 'people' => 'person',
-      'family_creator' => 'family', 'family_subject' => 'family', 'family_source' => 'family',
-      'corporate_creator' => 'corporate_entity', 'corporate_subject' => 'corporate_entity', 'corporate_source' => 'corporate_entity',
-      'software_creator' => 'software', 'software_subject' => 'software', 'software_source' => 'software',
-      'person_creator' => 'person', 'person_subject' => 'person', 'person_source' => 'person'
+      'families' => 'family', 'corporate_entities' => 'corporate_entity', 'people' => 'person'
     }
 
+    @@si_linked_agent_roles ||= EnumList.new('linked_agent_role')
+    SI_AGENT_TYPES = {
+      'family' => 'family', 'corporate' => 'corporate_entity', 'software' => 'software', 'person' => 'person'
+    }
 
     def self.renew
       clear(@@agent_relators)
+      clear(@@si_linked_agent_roles)
     end
+
     def self.key_for(agent)
       key = "#{agent[:type]} #{agent[:name]}"
       key
@@ -37,23 +39,42 @@ module LinkedObjects
        :id => id,
        :name => input_name || (id ? I18n.t('plugins.aspace-import-excel.unfound_id', :id => id, :type => 'Agent') : nil),
        :relator => row.fetch("#{type}_agent_relator_#{num}", nil),
-       :id_but_no_name => id && !input_name
+       :id_but_no_name => id && !input_name,
+       :role => 'creator'
      }
    end
 
    def self.build_from_si_field(si_field)
       id =  si_field[4] == "" ? nil : si_field[4]
       input_name = si_field[1] == "" ? nil : si_field[1]
-      type = si_field[0]
       relator = si_field[2] == "" ? nil : si_field[2]
 
-      {
-        :type => AGENT_TYPES[type],
-        :id => id,
-        :name => input_name || (id ? I18n.t('plugins.aspace-import-excel.unfound_id', :id => id, :type => 'Agent') : nil),
-        :relator => relator,
-        :id_but_no_name => id && !input_name
-      }
+      # type is concatenated with role (i.e. type_role)
+      # split at _ to obtain both type and role
+      type_role = si_field[0].split("_")
+      if type_role.length != 2 || !SI_AGENT_TYPES.key?(type_role[0])
+        raise ExcelImportException.new(I18n.t('plugins.aspace-import-excel.error.si_agent_type_invalid', :value => si_field[0], :why => 'invalid agent type'))
+      end
+
+      begin
+        role =  @@si_linked_agent_roles.value(type_role[1]) if !type_role[1].blank?
+
+        {
+          :type => SI_AGENT_TYPES[type_role[0]],
+          :id => id,
+          :name => input_name || (id ? I18n.t('plugins.aspace-import-excel.unfound_id', :id => id, :type => 'Agent') : nil),
+          :relator => relator,
+          :id_but_no_name => id && !input_name,
+          :role => role
+        }
+      rescue Exception => e
+        if e.message.start_with?("NOT FOUND")
+          raise ExcelImportException.new(I18n.t('plugins.aspace-import-excel.error.si_agent_type_invalid', :value => type_role[1], :why => 'invalid agent role'))
+        else
+          raise ExcelImportException.new(I18n.t('plugins.aspace-import-excel.error.si_agent_type_invalid', :value => type_role[1], :why => e.message))
+        end
+      end
+
    end
 
    def self.get_or_create_helper(agent, num, resource_uri, report)
@@ -88,7 +109,7 @@ module LinkedObjects
          @@agents[agent_obj.id.to_s] = agent_obj
        end
        @@agents[agent_key] = agent_obj
-       agent_link = {"ref" => agent_obj.uri, "role" => 'creator'}
+       agent_link = {"ref" => agent_obj.uri, "role" => agent[:role]}
        begin
          agent_link["relator"] =  @@agent_relators.value(agent[:relator]) if !agent[:relator].blank?
        rescue Exception => e
