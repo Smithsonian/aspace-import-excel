@@ -10,9 +10,17 @@ module LinkedObjects
 
 
   class AgentHandler < Handler
-    @@agents = {} 
+    @@agents = {}
     @@agent_relators ||= EnumList.new('linked_agent_archival_record_relators')
-    AGENT_TYPES = { 'families' => 'family', 'corporate_entities' => 'corporate_entity', 'people' => 'person'}
+    AGENT_TYPES = {
+      'families' => 'family', 'corporate_entities' => 'corporate_entity', 'people' => 'person',
+      'family_creator' => 'family', 'family_subject' => 'family', 'family_source' => 'family',
+      'corporate_creator' => 'corporate_entity', 'corporate_subject' => 'corporate_entity', 'corporate_source' => 'corporate_entity',
+      'software_creator' => 'software', 'software_subject' => 'software', 'software_source' => 'software',
+      'person_creator' => 'person', 'person_subject' => 'person', 'person_source' => 'person'
+    }
+
+
     def self.renew
       clear(@@agent_relators)
     end
@@ -20,7 +28,7 @@ module LinkedObjects
       key = "#{agent[:type]} #{agent[:name]}"
       key
     end
-    
+
    def self.build(row, type, num)
      id = row.fetch("#{type}_agent_record_id_#{num}", nil)
      input_name = row.fetch("#{type}_agent_header_#{num}",nil)
@@ -33,8 +41,22 @@ module LinkedObjects
      }
    end
 
-   def self.get_or_create(row, type, num, resource_uri, report)
-     agent = build(row, type, num)
+   def self.build_from_si_field(si_field)
+      id =  si_field[4] == "" ? nil : si_field[4]
+      input_name = si_field[1] == "" ? nil : si_field[1]
+      type = si_field[0]
+      relator = si_field[2] == "" ? nil : si_field[2]
+
+      {
+        :type => AGENT_TYPES[type],
+        :id => id,
+        :name => input_name || (id ? I18n.t('plugins.aspace-import-excel.unfound_id', :id => id, :type => 'Agent') : nil),
+        :relator => relator,
+        :id_but_no_name => id && !input_name
+      }
+   end
+
+   def self.get_or_create_helper(agent, num, resource_uri, report)
      agent_key = key_for(agent)
      if !(agent_obj = stored(@@agents, agent[:id], agent_key))
        unless agent[:id].blank?
@@ -78,7 +100,20 @@ module LinkedObjects
        end
      end
      agent_link
-   end
+  end
+
+  def self.get_or_create(row, type, num, resource_uri, report)
+    agent = build(row, type, num)
+    ret = get_or_create_helper(agent, num, resource_uri, report)
+    ret
+  end
+
+  def self.get_or_create_from_si_field(si_field, num, resource_uri, report)
+    agent = build_from_si_field(si_field)
+    ret = get_or_create_helper(agent, num, resource_uri, report)
+    ret
+  end
+
 
   def self.create_agent(agent, num)
     begin
@@ -98,7 +133,7 @@ module LinkedObjects
       begin
         ret_ag = JSONModel("agent_#{agent[:type]}".to_sym).find(agent[:id])
       rescue Exception => e
-        if e.message != 'RecordNotFound' 
+        if e.message != 'RecordNotFound'
 #          Pry::ColorPrinter.pp e.message
 #          Pry::ColorPrinter.pp e.backtrace
           raise ExcelImportException.new( I18n.t('plugins.aspace-import-excel.error.no_agent', :num => num, :why => e.message))
@@ -126,11 +161,23 @@ module LinkedObjects
      end
      obj
    end
+
+   def self.is_agent_type?(type)
+      atype = [
+        "person_creator", "person_subject", "person_source",
+        "personal_creator", "personal_subject", "personal_source",
+        "family_creator", "family_subject", "family_source",
+        "corporate_creator", "corporate_subject", "corporate_source",
+        "software_creator", "software_subject", "software_source"
+      ]
+
+      atype.include? type
+   end
   end # agent
 
   class DigitalObjectHandler < Handler
     @@digital_object_types ||= EnumList.new('digital_object_digital_object_type')
-    
+
     def self.create(row, archival_object, report)
       dig_o = nil
       dig_instance = nil
@@ -194,7 +241,7 @@ module LinkedObjects
       key
     end
 
-    
+
     def self.build(row)
       {
         :type => @@container_types.value(row.fetch('type_1', 'Box') || 'Box'),
@@ -202,7 +249,7 @@ module LinkedObjects
         :barcode => row.fetch('barcode',nil)
       }
     end
-    
+
     # returns a top container JSONModel
     def self.get_or_create(row, resource, report)
       begin
@@ -214,7 +261,7 @@ module LinkedObjects
           tc = JSONModel(:top_container).new._always_valid!
           tc.type = top_container[:type]
           tc.indicator = top_container[:indicator]
-          tc.barcode = top_container[:barcode] if top_container[:barcode] 
+          tc.barcode = top_container[:barcode] if top_container[:barcode]
           tc.repository = {'ref' => resource.split('/')[0..2].join('/')}
           #          UpdateUtils.test_exceptions(tc,'top_container')
           tc.save
@@ -241,7 +288,7 @@ module LinkedObjects
       end
       ret_tc
     end
-    
+
     def self.get_db_tc_by_barcode(barcode, repo_id)
       ret_tc = nil
       if barcode
@@ -300,7 +347,7 @@ module LinkedObjects
       @current_hierarchy[hier] = uri
     end
     def parent_for(hier)
-      # Level 1 parent may  be a resource record and therefore nil, 
+      # Level 1 parent may  be a resource record and therefore nil,
       if hier > 0
         parent_level = hier - 1
         @current_hierarchy.fetch(parent_level)
@@ -335,9 +382,23 @@ module LinkedObjects
         :id_but_no_term => id && !input_term
       }
     end
- 
-    def self.get_or_create(row, num, repo_id, report)
-      subject = build(row, num)
+
+    def self.build_from_si_field(si_field)
+      id =  si_field[4] == "" ? nil : si_field[4]
+      input_term = si_field[1] == "" ? nil : si_field[1]
+      type = si_field[0] == "" ? "topical" : si_field[0]
+      source = si_field[3] == "" ? "ingest" : si_field[3]
+
+      {
+        :id => id,
+        :term =>  input_term || (id ? I18n.t('plugins.aspace-import-excel.unfound_id', :id => id, :type => 'subject') : nil),
+        :type =>   @@subject_term_types.value(type || 'topical'),
+        :source => @@subject_sources.value(source || 'ingest'),
+        :id_but_no_term => id && !input_term
+      }
+    end
+
+    def self.get_or_create_helper(subject, num, repo_id, report)
       subject_key = key_for(subject)
       if !(subj = stored(@@subjects, subject[:id], subject_key))
         unless subject[:id].blank?
@@ -369,6 +430,18 @@ module LinkedObjects
       subj
     end
 
+    def self.get_or_create(row, num, repo_id, report)
+      subject = build(row, num)
+      ret = get_or_create_helper(subject, num, repo_id, report)
+      ret
+    end
+
+    def self.get_or_create_from_si_field(si_field, num, repo_id, report)
+      subject = build_from_si_field(si_field)
+      ret = get_or_create_helper(subject, num, repo_id, report)
+      ret
+    end
+
     def self.create_subj(subject, num)
       begin
         term = JSONModel(:term).new._always_valid!
@@ -384,13 +457,24 @@ module LinkedObjects
         raise ExcelImportException.new(I18n.t('plugins.aspace-import-excel.error.no_subject',:num => num, :why => e.message))
       end
       subj
-    end   
+    end
 
     def self.get_db_subj(subject)
       s_params = {}
       s_params["q"] = "title:\"#{subject[:term]}\" AND first_term_type:#{subject[:type]}"
 
       ret_subj = search(nil, s_params, :subject, 'subjects')
+    end
+
+    def self.is_subject_type?(type)
+      stype = [
+        "cultural_context", "function", "genre_form",
+        "geographic", "occupation", "style_period",
+        "technique", "temporal", "topical",
+        "uniform_title"
+      ]
+
+      stype.include?(type)
     end
   end
 end
