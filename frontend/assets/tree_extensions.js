@@ -15,7 +15,7 @@ $(function () {
 	var $file_form_modal;
 
 	/* used in aspace v1.* */
-	var bulk_btn_str = '<a class="btn btn-xs btn-default bulk-ingest" id="bulk-ingest" rel="archival_object" href="javascript:void(0);" data-record-label="Archival Object" title="Load via Spreadsheet">Load via Spreadsheet</a>';
+	var bulk_btn_str = '<a class="btn btn-xs btn-default bulk-ingest" id="bulk-ingest" rel="archival_object" href="javascript:void(0);" data-record-label="Archival Object" title="Load via Spreadsheet [Beta]">Load via Spreadsheet [Beta]</a>';
 
 	
 /* returns a hash with information about the selected archival object or resource */
@@ -237,7 +237,7 @@ $(function () {
 	};
 
       var bulkbtnArr = {
-            label: 'Load via Spreadsheet',
+            label: 'Load via Spreadsheet [Beta]',
             cssClasses: 'btn-default',
             onClick: function(event, btn, node, tree, toolbarRenderer) {
                 fileSelection();
