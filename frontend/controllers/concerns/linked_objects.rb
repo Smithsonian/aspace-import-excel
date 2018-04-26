@@ -164,7 +164,8 @@ module LinkedObjects
     if !ret_ag
       a_params = {"q" => "title:\"#{agent[:name]}\" AND primary_type:agent_#{agent[:type]}"}
       repo = resource_uri.split('/')[2]
-      ret_ag = search(repo, a_params, "agent_#{agent[:type]}".to_sym)
+      #ret_ag = search(repo, a_params, "agent_#{agent[:type]}".to_sym)
+      ret_ag = search_alt_multiple(repo, agent[:name], a_params, "agent_#{agent[:type]}".to_sym)
     end
     ret_ag
   end
@@ -484,7 +485,8 @@ module LinkedObjects
       s_params = {}
       s_params["q"] = "title:\"#{subject[:term]}\" AND first_term_type:#{subject[:type]}"
 
-      ret_subj = search(nil, s_params, :subject, 'subjects')
+      #ret_subj = search(nil, s_params, :subject, 'subjects')
+      ret_subj = search_alt_multiple(nil, subject[:term], s_params, :subject, 'subjects')
     end
 
     def self.is_subject_type?(type)
